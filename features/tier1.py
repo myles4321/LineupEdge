@@ -143,7 +143,6 @@ def _build_team_histories(matches: pd.DataFrame) -> dict[int, pd.DataFrame]:
             "season":         row["season"],
             "team_goals":     row["home_goals"],
             "opp_goals":      row["away_goals"],
-            "result":         home_result,  # 'H' means this team won
             "team_won":       1 if home_result == "H" else 0,
             "team_drew":      1 if home_result == "D" else 0,
             "team_lost":      1 if home_result == "A" else 0,
@@ -161,7 +160,6 @@ def _build_team_histories(matches: pd.DataFrame) -> dict[int, pd.DataFrame]:
             "season":         row["season"],
             "team_goals":     row["away_goals"],
             "opp_goals":      row["home_goals"],
-            "result":         away_result,  # 'H' means this team won
             "team_won":       1 if away_result == "H" else 0,
             "team_drew":      1 if away_result == "D" else 0,
             "team_lost":      1 if away_result == "A" else 0,
@@ -251,7 +249,6 @@ def _rest_days(history: pd.DataFrame, before_date: pd.Timestamp) -> float:
 
 
 def _season_table_stats(
-    history: pd.DataFrame,
     before_date: pd.Timestamp,
     season: int,
     all_team_histories: dict[int, pd.DataFrame],
@@ -282,7 +279,10 @@ def _season_table_stats(
         key=lambda t: (team_points[t], team_gd.get(t, 0)),
         reverse=True,
     )
-    position = sorted_teams.index(team_id) + 1 if team_id in sorted_teams else 20
+    # Return NaN when no prior season matches — avoids confusing position=20 with
+    # "genuinely last place". NaN is consistent with how other cold-start features
+    # handle the absence of prior data.
+    position = sorted_teams.index(team_id) + 1 if team_id in sorted_teams else np.nan
 
     return {
         "points":   float(this_points),
@@ -369,17 +369,18 @@ def compute_tier1_features(engine: Engine) -> pd.DataFrame:
         away_hist = team_histories.get(away_id, pd.DataFrame())
 
         # ── Rolling form ──────────────────────────────────────────────────
+        # Filter once; tail(n) slices are O(1) views on the already-filtered result.
         home_prior_all  = _prior_matches(home_hist, match_date)
         away_prior_all  = _prior_matches(away_hist, match_date)
 
-        home_form5  = _rolling_form(_prior_matches(home_hist, match_date, 5))
-        home_form10 = _rolling_form(_prior_matches(home_hist, match_date, 10))
-        away_form5  = _rolling_form(_prior_matches(away_hist, match_date, 5))
-        away_form10 = _rolling_form(_prior_matches(away_hist, match_date, 10))
+        home_form5  = _rolling_form(home_prior_all.tail(5))
+        home_form10 = _rolling_form(home_prior_all.tail(10))
+        away_form5  = _rolling_form(away_prior_all.tail(5))
+        away_form10 = _rolling_form(away_prior_all.tail(10))
 
         # ── xG averages ───────────────────────────────────────────────────
-        home_xg = _xg_averages(_prior_matches(home_hist, match_date, 5))
-        away_xg = _xg_averages(_prior_matches(away_hist, match_date, 5))
+        home_xg = _xg_averages(home_prior_all.tail(5))
+        away_xg = _xg_averages(away_prior_all.tail(5))
 
         # ── Venue splits ──────────────────────────────────────────────────
         home_home_prior = _prior_home_matches(home_hist, match_date, 10)
@@ -392,12 +393,8 @@ def compute_tier1_features(engine: Engine) -> pd.DataFrame:
         away_rest = _rest_days(away_hist, match_date)
 
         # ── League table ──────────────────────────────────────────────────
-        home_table = _season_table_stats(
-            home_hist, match_date, season, team_histories, home_id
-        )
-        away_table = _season_table_stats(
-            away_hist, match_date, season, team_histories, away_id
-        )
+        home_table = _season_table_stats(match_date, season, team_histories, home_id)
+        away_table = _season_table_stats(match_date, season, team_histories, away_id)
 
         # ── Points trajectory ─────────────────────────────────────────────
         home_ppg5 = _points_per_game_last5(home_prior_all)
@@ -419,11 +416,12 @@ def compute_tier1_features(engine: Engine) -> pd.DataFrame:
             "home_team_id":    home_id,
             "away_team_id":    away_id,
 
-            # ELO (computed before this match)
-            "home_elo":        home_elo.iloc[idx] if isinstance(idx, int) else home_elo.loc[idx],
-            "away_elo":        away_elo.iloc[idx] if isinstance(idx, int) else away_elo.loc[idx],
-            "elo_diff":        (home_elo.iloc[idx] if isinstance(idx, int) else home_elo.loc[idx]) -
-                               (away_elo.iloc[idx] if isinstance(idx, int) else away_elo.loc[idx]),
+            # ELO (computed before this match).
+            # home_elo/away_elo are indexed by matches.index, so .loc[idx] is always
+            # correct — even if the DataFrame has non-sequential integer labels.
+            "home_elo":        home_elo.loc[idx],
+            "away_elo":        away_elo.loc[idx],
+            "elo_diff":        home_elo.loc[idx] - away_elo.loc[idx],
 
             # Rolling form — last 5
             "home_form5_win_rate":  home_form5["win_rate"],
