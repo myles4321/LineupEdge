@@ -20,13 +20,47 @@ Usage:
 import argparse
 import logging
 import pathlib
+import re
 import sys
+from typing import Any
 
 from sqlalchemy import create_engine, text
 
 sys.path.insert(0, str(pathlib.Path(__file__).parent.parent))
 from config import DATABASE_URL, LEAGUE_ID, SEASONS
 from pipeline.api_client import APIFootballClient, DailyLimitReached
+
+
+def _parse_matchday(raw: str | None) -> int | None:
+    """Extract a round number from API-Football's matchday string.
+
+    API returns strings like "Regular Season - 12" or "Premier League - 5".
+    We extract the trailing integer and store that.
+    Returns None if the string is absent or contains no number.
+    """
+    if raw is None:
+        return None
+    match = re.search(r"(\d+)$", str(raw).strip())
+    return int(match.group(1)) if match else None
+
+
+def _parse_stat(stats: dict[str, Any], key: str) -> float | None:
+    """Extract a numeric value from an API-Football statistics dict.
+
+    Handles percentage strings (e.g. "84%"), plain numbers, and nulls.
+    """
+    val = stats.get(key)
+    if val is None:
+        return None
+    if isinstance(val, str) and val.endswith("%"):
+        try:
+            return float(val.rstrip("%"))
+        except ValueError:
+            return None
+    try:
+        return float(val)
+    except (TypeError, ValueError):
+        return None
 
 logging.basicConfig(
     level=logging.INFO,
@@ -96,7 +130,7 @@ def ingest_fixtures(client: APIFootballClient, engine) -> None:
                         "match_id":     fix["fixture"]["id"],
                         "date":         fix["fixture"]["date"],
                         "season":       season,
-                        "matchday":     fix["league"].get("round"),
+                        "matchday":     _parse_matchday(fix["league"].get("round")),
                         "home_team_id": teams["home"]["id"],
                         "away_team_id": teams["away"]["id"],
                         "home_goals":   goals.get("home"),
@@ -108,9 +142,16 @@ def ingest_fixtures(client: APIFootballClient, engine) -> None:
 
             conn.commit()
 
-        client.save_checkpoint(checkpoint_key, True)
-        logger.info("Season %d fixtures committed. Requests remaining today: %d",
-                    season, client.requests_remaining)
+        if fixtures:
+            client.save_checkpoint(checkpoint_key, True)
+            logger.info("Season %d fixtures committed. Requests remaining today: %d",
+                        season, client.requests_remaining)
+        else:
+            logger.warning(
+                "Season %d returned 0 fixtures — free plan may not cover this season. "
+                "Not checkpointing so it will be retried.",
+                season,
+            )
 
 
 def ingest_lineups(client: APIFootballClient, engine) -> None:
@@ -254,17 +295,6 @@ def ingest_match_stats(client: APIFootballClient, engine) -> None:
                 team_id = team_stats["team"]["id"]
                 stats = {s["type"]: s["value"] for s in team_stats["statistics"]}
 
-                def _num(key: str):
-                    val = stats.get(key)
-                    if val is None:
-                        return None
-                    if isinstance(val, str) and val.endswith("%"):
-                        return float(val.rstrip("%"))
-                    try:
-                        return float(val)
-                    except (TypeError, ValueError):
-                        return None
-
                 conn.execute(
                     text("""
                         INSERT INTO team_stats
@@ -280,22 +310,130 @@ def ingest_match_stats(client: APIFootballClient, engine) -> None:
                     {
                         "match_id":        match_id,
                         "team_id":         team_id,
-                        "xg":              _num("expected_goals"),
-                        "shots_total":     _num("Total Shots"),
-                        "shots_on_target": _num("Shots on Goal"),
-                        "possession_pct":  _num("Ball Possession"),
-                        "passes_total":    _num("Total passes"),
-                        "pass_accuracy":   _num("Passes %"),
-                        "corners":         _num("Corner Kicks"),
-                        "fouls":           _num("Fouls"),
-                        "yellow_cards":    _num("Yellow Cards"),
-                        "red_cards":       _num("Red Cards"),
+                        "xg":              _parse_stat(stats, "expected_goals"),
+                        "shots_total":     _parse_stat(stats, "Total Shots"),
+                        "shots_on_target": _parse_stat(stats, "Shots on Goal"),
+                        "possession_pct":  _parse_stat(stats, "Ball Possession"),
+                        "passes_total":    _parse_stat(stats, "Total passes"),
+                        "pass_accuracy":   _parse_stat(stats, "Passes %"),
+                        "corners":         _parse_stat(stats, "Corner Kicks"),
+                        "fouls":           _parse_stat(stats, "Fouls"),
+                        "yellow_cards":    _parse_stat(stats, "Yellow Cards"),
+                        "red_cards":       _parse_stat(stats, "Red Cards"),
                     },
                 )
             conn.commit()
 
         logger.info(
             "Stats stored for match %d. Requests remaining today: %d",
+            match_id, client.requests_remaining,
+        )
+
+
+def ingest_player_stats(client: APIFootballClient, engine) -> None:
+    """Pull individual player statistics for every completed match.
+
+    Uses /fixtures/players endpoint — returns ratings, minutes, goals,
+    assists, shots, passes, and tackles per player per match.
+    ~1 request per match, ~1,900 requests total for 5 EPL seasons.
+    """
+    with engine.connect() as conn:
+        rows = conn.execute(
+            text("""
+                SELECT DISTINCT m.match_id FROM matches m
+                LEFT JOIN player_stats ps ON ps.match_id = m.match_id
+                WHERE m.status = 'FT' AND ps.id IS NULL
+                ORDER BY m.match_id
+            """)
+        ).fetchall()
+
+    match_ids = [r[0] for r in rows]
+    logger.info("%d matches need player stats.", len(match_ids))
+
+    for match_id in match_ids:
+        if client.requests_remaining == 0:
+            logger.warning("Daily limit reached — stopping player stats ingestion. Resume tomorrow.")
+            return
+
+        try:
+            data = client.get("/fixtures/players", params={"fixture": match_id})
+        except DailyLimitReached:
+            logger.warning("Daily limit reached during player stats ingestion.")
+            return
+
+        team_entries = data.get("response", [])
+        if not team_entries:
+            logger.debug("No player stats for match %d — skipping.", match_id)
+            continue
+
+        with engine.connect() as conn:
+            for team_entry in team_entries:
+                team_id = team_entry["team"]["id"]
+
+                for player_entry in team_entry.get("players", []):
+                    player = player_entry["player"]
+                    player_id = player["id"]
+
+                    # API returns a list of statistics — we only need index 0
+                    raw = player_entry.get("statistics", [{}])[0]
+                    games   = raw.get("games", {})
+                    goals   = raw.get("goals", {})
+                    shots   = raw.get("shots", {})
+                    passes  = raw.get("passes", {})
+                    tackles = raw.get("tackles", {})
+
+                    # Upsert the player record in case they weren't in a lineup
+                    conn.execute(
+                        text("""
+                            INSERT INTO players (player_id, name, position)
+                            VALUES (:player_id, :name, :position)
+                            ON CONFLICT (player_id) DO NOTHING
+                        """),
+                        {
+                            "player_id": player_id,
+                            "name":      player.get("name", ""),
+                            "position":  player.get("pos"),
+                        },
+                    )
+
+                    rating_raw = games.get("rating")
+                    try:
+                        rating = float(rating_raw) if rating_raw is not None else None
+                    except (TypeError, ValueError):
+                        rating = None
+
+                    conn.execute(
+                        text("""
+                            INSERT INTO player_stats
+                                (player_id, match_id, team_id, minutes_played, rating,
+                                 goals, assists, shots_total, shots_on_target,
+                                 passes_total, pass_accuracy, tackles)
+                            VALUES
+                                (:player_id, :match_id, :team_id, :minutes_played, :rating,
+                                 :goals, :assists, :shots_total, :shots_on_target,
+                                 :passes_total, :pass_accuracy, :tackles)
+                            ON CONFLICT (player_id, match_id) DO NOTHING
+                        """),
+                        {
+                            "player_id":      player_id,
+                            "match_id":       match_id,
+                            "team_id":        team_id,
+                            "minutes_played": games.get("minutes"),
+                            "rating":         rating,
+                            "goals":          goals.get("total") or 0,
+                            "assists":        goals.get("assists") or 0,
+                            "shots_total":    shots.get("total") or 0,
+                            "shots_on_target": shots.get("on") or 0,
+                            "passes_total":   passes.get("total") or 0,
+                            "pass_accuracy":  _parse_stat(passes, "accuracy"),
+                            "tackles":        tackles.get("total") or 0,
+                        },
+                    )
+
+            conn.commit()
+
+        logger.info(
+            "Player stats stored for match %d. Requests remaining today: %d",
             match_id, client.requests_remaining,
         )
 
@@ -325,7 +463,7 @@ def main() -> None:
     elif args.step == "stats":
         ingest_match_stats(client, engine)
     elif args.step == "player_stats":
-        logger.info("Player stats ingestion — to be implemented in Phase 1.")
+        ingest_player_stats(client, engine)
 
     logger.info("Done. Requests used today: %d/%d", client.requests_today, 95)
 

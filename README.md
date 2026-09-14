@@ -50,23 +50,33 @@ python -c "from pipeline.football_data import FootballDataLoader; print('FD load
 ## Data Ingestion (Phase 1)
 
 Run each step daily. The pipeline resumes from checkpoints automatically.
+**Start immediately — ingestion runs in the background over 3–4 weeks.**
 
 ```bash
-# Step 1: fixtures (~5 requests, run once)
+# Step 1: fixtures (~5 requests — run once, all seasons)
 python pipeline/ingest.py --step fixtures
 
 # Step 2: lineups (~1,900 requests — run daily, ~19 days)
 python pipeline/ingest.py --step lineups
 
-# Step 3: match statistics (~1,900 requests — run after lineups complete)
+# Step 3: match statistics (~1,900 requests — run daily after lineups complete)
 python pipeline/ingest.py --step stats
 
-# Step 4: odds — zero API quota (from Football-Data.co.uk CSVs)
-# python pipeline/load_odds.py --season 2020 2021 2022 2023 2024
+# Step 4: player stats (~1,900 requests — run daily after stats complete)
+python pipeline/ingest.py --step player_stats
+
+# Odds: zero API quota — download from Football-Data.co.uk (run after fixtures)
+python pipeline/load_odds.py
+
+# Data quality report (run anytime to check ingestion progress)
+python pipeline/validate.py
 ```
 
 **Daily budget:** 95 requests/day (free plan cap = 100, 5 headroom).
 The script stops automatically when the budget is reached and logs how to resume.
+
+**Priority order:** Fixtures → Lineups → Odds → Stats → Player stats.
+Lineups and odds are the most critical for Phase 2/4 feature engineering.
 
 ---
 
