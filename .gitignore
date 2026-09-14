@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Environment
+.env
+
+# Data (raw API responses and large CSVs — track schema/scripts only)
+data/raw/
+data/processed/
+
+# Model artifacts
+models/*.pkl
+models/*.joblib
+models/*.json
+!models/.gitkeep
+
+# df-analyze outputs
+df_analyze_results/
+
+# Checkpoints
+pipeline/checkpoints/
+
+# Jupyter
+.ipynb_checkpoints/
+notebooks/.ipynb_checkpoints/
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+*.swp
