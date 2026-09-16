@@ -84,6 +84,34 @@ FEATURE_COLS = [
     "h2h_total",
 ]
 
+# Tier 2 numeric model-input columns (appended to FEATURE_COLS for Tier 2 models).
+# Categorical formation strings (home_formation, away_formation) are stored in
+# the CSV as metadata but are not listed here — they require encoding before use.
+TIER2_FEATURE_COLS = [
+    # Formation history
+    "home_formation_win_rate",
+    "away_formation_win_rate",
+    "home_formation_change",
+    "away_formation_change",
+    # Lineup strength (mean of starters' recent ratings)
+    "home_lineup_strength",
+    "away_lineup_strength",
+    "lineup_strength_diff",
+    # Key player availability (fraction of modal XI present)
+    "home_key_player_available",
+    "away_key_player_available",
+    # Lineup deviation (fraction of modal XI absent)
+    "home_lineup_deviation",
+    "away_lineup_deviation",
+    # Fatigue (mean starter minutes in last 14 days)
+    "home_avg_fatigue",
+    "away_avg_fatigue",
+    "fatigue_diff",
+]
+
+# Combined feature set for Tier 2 models (Tier 1 + Tier 2)
+ALL_FEATURE_COLS = FEATURE_COLS + TIER2_FEATURE_COLS
+
 # Target columns
 TARGET_COL       = "result_label"   # 1=H, 0=D, -1=A  (for model training)
 TARGET_STR_COL   = "result"         # 'H'/'D'/'A'      (for human readability)
@@ -102,10 +130,10 @@ INT_LABEL_TO_IDX = {1: 0, 0: 1, -1: 2}
 def load_splits(
     csv_path: str = "data/processed/tier1_features.csv",
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    """Load the feature matrix and return (train, val, test) DataFrames.
+    """Load a feature matrix CSV and return (train, val, test) DataFrames.
 
-    Each returned DataFrame contains metadata + feature + target columns.
-    No random shuffling is ever applied.
+    Works with both tier1_features.csv and tier2_features.csv — pass the
+    appropriate csv_path. No random shuffling is ever applied.
     """
     df = pd.read_csv(csv_path, parse_dates=["date"])
     df["date"] = pd.to_datetime(df["date"], utc=True)
@@ -118,9 +146,12 @@ def load_splits(
 
 
 def xy(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series]:
-    """Return (X, y) — feature matrix and integer label series."""
-    # Only include feature columns that actually exist in this DataFrame
+    """Return (X, y) with Tier 1 features and integer label series."""
     cols = [c for c in FEATURE_COLS if c in df.columns]
-    X = df[cols]
-    y = df[TARGET_COL]
-    return X, y
+    return df[cols], df[TARGET_COL]
+
+
+def xy_tier2(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series]:
+    """Return (X, y) with all Tier 1 + Tier 2 features and integer label series."""
+    cols = [c for c in ALL_FEATURE_COLS if c in df.columns]
+    return df[cols], df[TARGET_COL]
