@@ -50,13 +50,10 @@ import xgboost as xgb
 sys.path.insert(0, str(pathlib.Path(__file__).parent.parent))
 from config import DATABASE_URL
 from models.split import (
-    FEATURE_COLS,
     INT_LABEL_TO_IDX,
     LABEL_ORDER,
     LABEL_TO_IDX,
-    TARGET_COL,
     TARGET_STR_COL,
-    VAL_SEASON,
     load_splits,
     xy,
 )
