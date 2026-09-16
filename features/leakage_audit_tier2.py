@@ -41,6 +41,7 @@ from config import DATABASE_URL
 from features.tier2 import (
     _build_starters_lookup,
     _build_team_lineup_histories,
+    _formation_win_rate,
     _load_lineup_metadata,
     _load_lineup_starters,
 )
@@ -168,28 +169,52 @@ def audit(tier2_df: pd.DataFrame, engine) -> list[dict]:
         else f"verified {len(first_lineup_match)} teams",
     ))
 
-    # ── Check 4: Formation history slices contain only pre-match dates ─────────
-    # Spot-check up to 10 teams: for every match in their lineup history,
-    # verify that the "prior" slice used for formation win rate contains only
-    # matches strictly before the match date.
-    future_leak_count = 0
+    # ── Check 4: Formation win rate spot-check against recomputed values ──────
+    # For up to 10 sampled teams, recompute formation_win_rate for each of
+    # their matches (skipping the first, where NaN is expected) and compare
+    # against the stored value in tier2_df. A mismatch indicates either a
+    # temporal leak or a computation error in the feature engineering step.
+    recompute_failures: list[str] = []
     slices_checked = 0
     sample_teams = list(team_lineup_hist.keys())[:10]
 
     for team_id in sample_teams:
         hist = team_lineup_hist[team_id]
-        for i in range(len(hist)):
-            match_date = hist.iloc[i]["date"]
-            prior = hist[hist["date"] < match_date]
-            if not prior.empty and prior["date"].max() >= match_date:
-                future_leak_count += 1
+        for i in range(1, len(hist)):  # skip first match (NaN expected, no prior data)
+            match_id_i  = int(hist.iloc[i]["match_id"])
+            match_date_i = hist.iloc[i]["date"]
+            formation_i  = hist.iloc[i]["formation"]
+
+            row = tier2_df[tier2_df["match_id"] == match_id_i]
+            if row.empty:
+                continue
+
+            row = row.iloc[0]
+            col = (
+                "home_formation_win_rate"
+                if int(row["home_team_id"]) == team_id
+                else "away_formation_win_rate"
+            )
+            if col not in tier2_df.columns:
+                continue
+
+            expected = _formation_win_rate(hist, formation_i, match_date_i)
+            actual   = row[col]
+
+            both_nan = np.isnan(expected) and (
+                isinstance(actual, float) and np.isnan(actual)
+            )
+            if not both_nan and not np.isclose(float(expected), float(actual), equal_nan=True):
+                recompute_failures.append(
+                    f"team {team_id} match {match_id_i}: expected {expected:.4f} got {actual:.4f}"
+                )
             slices_checked += 1
 
     results.append(_check_result(
-        f"Formation history slices temporally clean ({len(sample_teams)} teams sampled)",
-        future_leak_count == 0,
-        f"{future_leak_count} slices contained future dates" if future_leak_count
-        else f"{slices_checked} slices verified clean",
+        f"Formation win rate spot-check matches recomputed values ({len(sample_teams)} teams sampled)",
+        len(recompute_failures) == 0,
+        "; ".join(recompute_failures[:3]) if recompute_failures
+        else f"{slices_checked} values recomputed and matched",
     ))
 
     return results

@@ -236,7 +236,7 @@ def _formation_win_rate(
 
     Returns NaN if the formation is unknown or no prior matches used it.
     """
-    if team_hist.empty or formation is None:
+    if team_hist.empty or pd.isna(formation):
         return np.nan
     prior = team_hist[team_hist["date"] < before_date]
     with_formation = prior[prior["formation"] == formation]
@@ -255,13 +255,13 @@ def _formation_change(
     Returns NaN if the team has no prior lineup history or the prior
     formation is unknown.
     """
-    if team_hist.empty or current_formation is None:
+    if team_hist.empty or pd.isna(current_formation):
         return np.nan
     prior = team_hist[team_hist["date"] < before_date]
     if prior.empty:
         return np.nan
     last_formation = prior.iloc[-1]["formation"]
-    if last_formation is None:
+    if pd.isna(last_formation):
         return np.nan
     return 1.0 if last_formation != current_formation else 0.0
 
