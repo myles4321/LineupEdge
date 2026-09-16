@@ -44,6 +44,42 @@ _RESULT_COLUMNS = {
     "Date": "date_raw",
 }
 
+# Football-Data.co.uk uses abbreviated names that differ from API-Football.
+# Maps FD name → API-Football name for reliable match lookups.
+_FD_TO_API_NAME: dict[str, str] = {
+    "Man City":       "Manchester City",
+    "Man United":     "Manchester United",
+    "Nott'm Forest":  "Nottingham Forest",
+    "Sheffield Weds": "Sheffield Wednesday",
+    "Sheffield Utd":  "Sheffield Utd",   # same in both, listed for clarity
+    "Spurs":          "Tottenham",
+    "West Brom":      "West Bromwich Albion",
+    "QPR":            "Queens Park Rangers",
+    "Huddersfield":   "Huddersfield Town",
+    "Stoke":          "Stoke City",
+    "Swansea":        "Swansea City",
+    "Cardiff":        "Cardiff City",
+    "Norwich":        "Norwich City",
+    "Middlesbrough":  "Middlesbrough",
+    "Blackburn":      "Blackburn Rovers",
+    "Sunderland":     "Sunderland",
+    "Wigan":          "Wigan Athletic",
+    "Reading":        "Reading",
+    "Birmingham":     "Birmingham City",
+    "Coventry":       "Coventry City",
+    "Watford":        "Watford",
+    "Preston":        "Preston North End",
+    "Ipswich":        "Ipswich",
+    "Luton":          "Luton",
+    "Burnley":        "Burnley",
+    "Brentford":      "Brentford",
+}
+
+
+def _resolve_team_name(fd_name: str) -> str:
+    """Return the API-Football equivalent of a Football-Data.co.uk team name."""
+    return _FD_TO_API_NAME.get(fd_name, fd_name)
+
 
 def _season_to_short(season: int) -> str:
     """Convert season year to Football-Data.co.uk short format.
@@ -114,7 +150,11 @@ class FootballDataLoader:
                     _normalise_implied_probabilities(home_odds, draw_odds, away_odds)
                 )
 
-                # Resolve match_id by joining on team names + season
+                # Resolve match_id by joining on team names + season.
+                # Translate FD abbreviations to API-Football names before querying.
+                api_home = _resolve_team_name(str(row["HomeTeam"]))
+                api_away = _resolve_team_name(str(row["AwayTeam"]))
+
                 match = conn.execute(
                     text("""
                         SELECT m.match_id
@@ -127,8 +167,8 @@ class FootballDataLoader:
                         LIMIT 1
                     """),
                     {
-                        "home": f"%{row['HomeTeam']}%",
-                        "away": f"%{row['AwayTeam']}%",
+                        "home": f"%{api_home}%",
+                        "away": f"%{api_away}%",
                         "season": season,
                     },
                 ).fetchone()

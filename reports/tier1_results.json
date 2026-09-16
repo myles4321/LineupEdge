@@ -1,0 +1,25 @@
+{
+  "split": {
+    "train": 2022,
+    "val": 2023,
+    "test": 2024
+  },
+  "n_features": 34,
+  "results": [
+    {
+      "model": "Logistic Regression",
+      "log_loss": 1.0327482737005327,
+      "brier": 0.20179526932953107
+    },
+    {
+      "model": "XGBoost",
+      "log_loss": 1.0200957632590868,
+      "brier": 0.20343525378260363
+    },
+    {
+      "model": "Bookmaker B365",
+      "log_loss": 0.9707576661637081,
+      "brier": 0.19288793934551052
+    }
+  ]
+}
