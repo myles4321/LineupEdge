@@ -50,7 +50,6 @@ from models.split import (
     INT_LABEL_TO_IDX,
     LABEL_ORDER,
     LABEL_TO_IDX,
-    TARGET_STR_COL,
     load_splits,
     xy,
 )
@@ -227,7 +226,6 @@ def train_random_forest(
 
     imputer = SimpleImputer(strategy="median")
     X_train_imp = imputer.fit_transform(X_train)
-    X_val_imp   = imputer.transform(X_val)
 
     best_n, best_oob = 500, -1.0
     for n_est in [100, 200, 300, 400, 500]:
@@ -558,7 +556,6 @@ def train_lda_qda(
 
     # QDA — tune reg_param on val
     best_reg, best_loss = 0.0, float("inf")
-    qda_failed = False
 
     for reg in [0.0, 0.001, 0.01, 0.1]:
         try:
@@ -643,8 +640,6 @@ def main() -> None:
     X_val,   y_val   = xy(val)
     X_test,  y_test  = xy(test)
 
-    y_test_str = test[TARGET_STR_COL]
-
     # Drop 100%-null features (e.g. xG columns until stats ingestion completes)
     null_in_train = X_train.isna().mean()
     scorable_cols = [c for c in X_train.columns if null_in_train[c] < 1.0]
@@ -669,7 +664,6 @@ def main() -> None:
     y_full_enc = np.concatenate([y_train_enc, y_val_enc])
 
     test_reset = test.reset_index(drop=True)
-    X_test_reset = X_test.reset_index(drop=True)
 
     logger.info(
         "Train: %d  Val: %d  Test: %d  Full: %d  Features: %d",
@@ -683,117 +677,104 @@ def main() -> None:
     results = []
     lasso_zero_features = []
 
-    model_configs = [
-        ("random_forest", "tier7_rf_v1"),
-        ("svm",           "tier7_svm_v1"),
-        ("knn",           "tier7_knn_v1"),
-        ("gaussian_nb",   "tier7_gnb_v1"),
-        ("mlp",           "tier7_mlp_v1"),
-        ("ridge_logreg",  "tier7_ridge_v1"),
-        ("lasso_logreg",  "tier7_lasso_v1"),
-        ("elastic_net",   "tier7_enet_v1"),
-        ("lda",           "tier7_lda_v1"),
-        ("qda",           "tier7_qda_v1"),
-    ]
-
     # ── Random Forest ─────────────────────────────────────────────────────────
     rf_pipe, rf_params = train_random_forest(
-        X_train, y_train_enc, X_val, y_val_enc, X_full, y_full_enc, X_test_reset, y_test_enc)
+        X_train, y_train_enc, X_val, y_val_enc, X_full, y_full_enc, X_test, y_test_enc)
     rf_metrics = _evaluate("random_forest", rf_pipe, X_full, y_full_enc,
-                           X_test_reset, y_test_enc, rf_params)
+                           X_test, y_test_enc, rf_params)
     results.append({"model": "tier7_rf_v1", "model_version": "tier7_rf_v1", **rf_metrics})
     if not args.no_db:
-        n = _log_predictions(engine, test_reset, rf_pipe.predict_proba(X_test_reset), "tier7_rf_v1")
+        n = _log_predictions(engine, test_reset, rf_pipe.predict_proba(X_test), "tier7_rf_v1")
         logger.info("Logged %d predictions for tier7_rf_v1", n)
 
     # ── SVM ───────────────────────────────────────────────────────────────────
     svm_pipe, svm_params = train_svm(
-        X_train, y_train_enc, X_val, y_val_enc, X_full, y_full_enc, X_test_reset, y_test_enc)
+        X_train, y_train_enc, X_val, y_val_enc, X_full, y_full_enc, X_test, y_test_enc)
     svm_metrics = _evaluate("svm", svm_pipe, X_full, y_full_enc,
-                            X_test_reset, y_test_enc, svm_params)
+                            X_test, y_test_enc, svm_params)
     results.append({"model": "tier7_svm_v1", "model_version": "tier7_svm_v1", **svm_metrics})
     if not args.no_db:
-        n = _log_predictions(engine, test_reset, svm_pipe.predict_proba(X_test_reset), "tier7_svm_v1")
+        n = _log_predictions(engine, test_reset, svm_pipe.predict_proba(X_test), "tier7_svm_v1")
         logger.info("Logged %d predictions for tier7_svm_v1", n)
 
     # ── KNN ───────────────────────────────────────────────────────────────────
     knn_pipe, knn_params = train_knn(
-        X_train, y_train_enc, X_val, y_val_enc, X_full, y_full_enc, X_test_reset, y_test_enc)
+        X_train, y_train_enc, X_val, y_val_enc, X_full, y_full_enc, X_test, y_test_enc)
     knn_metrics = _evaluate("knn", knn_pipe, X_full, y_full_enc,
-                            X_test_reset, y_test_enc, knn_params)
+                            X_test, y_test_enc, knn_params)
     results.append({"model": "tier7_knn_v1", "model_version": "tier7_knn_v1", **knn_metrics})
     if not args.no_db:
-        n = _log_predictions(engine, test_reset, knn_pipe.predict_proba(X_test_reset), "tier7_knn_v1")
+        n = _log_predictions(engine, test_reset, knn_pipe.predict_proba(X_test), "tier7_knn_v1")
         logger.info("Logged %d predictions for tier7_knn_v1", n)
 
     # ── Gaussian NB ───────────────────────────────────────────────────────────
     gnb_pipe, gnb_params = train_gaussian_nb(
-        X_train, y_train_enc, X_val, y_val_enc, X_full, y_full_enc, X_test_reset, y_test_enc)
+        X_train, y_train_enc, X_val, y_val_enc, X_full, y_full_enc, X_test, y_test_enc)
     gnb_metrics = _evaluate("gaussian_nb", gnb_pipe, X_full, y_full_enc,
-                            X_test_reset, y_test_enc, gnb_params)
+                            X_test, y_test_enc, gnb_params)
     results.append({"model": "tier7_gnb_v1", "model_version": "tier7_gnb_v1", **gnb_metrics})
     if not args.no_db:
-        n = _log_predictions(engine, test_reset, gnb_pipe.predict_proba(X_test_reset), "tier7_gnb_v1")
+        n = _log_predictions(engine, test_reset, gnb_pipe.predict_proba(X_test), "tier7_gnb_v1")
         logger.info("Logged %d predictions for tier7_gnb_v1", n)
 
     # ── MLP ───────────────────────────────────────────────────────────────────
     mlp_pipe, mlp_params = train_mlp(
-        X_train, y_train_enc, X_val, y_val_enc, X_full, y_full_enc, X_test_reset, y_test_enc)
+        X_train, y_train_enc, X_val, y_val_enc, X_full, y_full_enc, X_test, y_test_enc)
     mlp_metrics = _evaluate("mlp", mlp_pipe, X_full, y_full_enc,
-                            X_test_reset, y_test_enc, mlp_params)
+                            X_test, y_test_enc, mlp_params)
     results.append({"model": "tier7_mlp_v1", "model_version": "tier7_mlp_v1", **mlp_metrics})
     if not args.no_db:
-        n = _log_predictions(engine, test_reset, mlp_pipe.predict_proba(X_test_reset), "tier7_mlp_v1")
+        n = _log_predictions(engine, test_reset, mlp_pipe.predict_proba(X_test), "tier7_mlp_v1")
         logger.info("Logged %d predictions for tier7_mlp_v1", n)
 
     # ── Ridge Logistic Regression ─────────────────────────────────────────────
     ridge_pipe, ridge_params = train_ridge_logreg(
-        X_train, y_train_enc, X_val, y_val_enc, X_full, y_full_enc, X_test_reset, y_test_enc)
+        X_train, y_train_enc, X_val, y_val_enc, X_full, y_full_enc, X_test, y_test_enc)
     ridge_metrics = _evaluate("ridge_logreg", ridge_pipe, X_full, y_full_enc,
-                              X_test_reset, y_test_enc, ridge_params)
+                              X_test, y_test_enc, ridge_params)
     results.append({"model": "tier7_ridge_v1", "model_version": "tier7_ridge_v1", **ridge_metrics})
     if not args.no_db:
-        n = _log_predictions(engine, test_reset, ridge_pipe.predict_proba(X_test_reset), "tier7_ridge_v1")
+        n = _log_predictions(engine, test_reset, ridge_pipe.predict_proba(X_test), "tier7_ridge_v1")
         logger.info("Logged %d predictions for tier7_ridge_v1", n)
 
     # ── LASSO Logistic Regression ─────────────────────────────────────────────
     lasso_pipe, lasso_params, lasso_zero_features = train_lasso_logreg(
-        X_train, y_train_enc, X_val, y_val_enc, X_full, y_full_enc, X_test_reset, y_test_enc,
+        X_train, y_train_enc, X_val, y_val_enc, X_full, y_full_enc, X_test, y_test_enc,
         feature_names)
     lasso_metrics = _evaluate("lasso_logreg", lasso_pipe, X_full, y_full_enc,
-                              X_test_reset, y_test_enc, lasso_params)
+                              X_test, y_test_enc, lasso_params)
     results.append({"model": "tier7_lasso_v1", "model_version": "tier7_lasso_v1", **lasso_metrics})
     if not args.no_db:
-        n = _log_predictions(engine, test_reset, lasso_pipe.predict_proba(X_test_reset), "tier7_lasso_v1")
+        n = _log_predictions(engine, test_reset, lasso_pipe.predict_proba(X_test), "tier7_lasso_v1")
         logger.info("Logged %d predictions for tier7_lasso_v1", n)
 
     # ── Elastic Net ───────────────────────────────────────────────────────────
     enet_pipe, enet_params = train_elastic_net(
-        X_train, y_train_enc, X_val, y_val_enc, X_full, y_full_enc, X_test_reset, y_test_enc)
+        X_train, y_train_enc, X_val, y_val_enc, X_full, y_full_enc, X_test, y_test_enc)
     enet_metrics = _evaluate("elastic_net", enet_pipe, X_full, y_full_enc,
-                             X_test_reset, y_test_enc, enet_params)
+                             X_test, y_test_enc, enet_params)
     results.append({"model": "tier7_enet_v1", "model_version": "tier7_enet_v1", **enet_metrics})
     if not args.no_db:
-        n = _log_predictions(engine, test_reset, enet_pipe.predict_proba(X_test_reset), "tier7_enet_v1")
+        n = _log_predictions(engine, test_reset, enet_pipe.predict_proba(X_test), "tier7_enet_v1")
         logger.info("Logged %d predictions for tier7_enet_v1", n)
 
     # ── LDA + QDA ─────────────────────────────────────────────────────────────
     lda_pipe, lda_params, qda_pipe, qda_params = train_lda_qda(
-        X_train, y_train_enc, X_val, y_val_enc, X_full, y_full_enc, X_test_reset, y_test_enc)
+        X_train, y_train_enc, X_val, y_val_enc, X_full, y_full_enc, X_test, y_test_enc)
 
     lda_metrics = _evaluate("lda", lda_pipe, X_full, y_full_enc,
-                            X_test_reset, y_test_enc, lda_params)
+                            X_test, y_test_enc, lda_params)
     results.append({"model": "tier7_lda_v1", "model_version": "tier7_lda_v1", **lda_metrics})
     if not args.no_db:
-        n = _log_predictions(engine, test_reset, lda_pipe.predict_proba(X_test_reset), "tier7_lda_v1")
+        n = _log_predictions(engine, test_reset, lda_pipe.predict_proba(X_test), "tier7_lda_v1")
         logger.info("Logged %d predictions for tier7_lda_v1", n)
 
     if qda_pipe is not None:
         qda_metrics = _evaluate("qda", qda_pipe, X_full, y_full_enc,
-                                X_test_reset, y_test_enc, qda_params)
+                                X_test, y_test_enc, qda_params)
         results.append({"model": "tier7_qda_v1", "model_version": "tier7_qda_v1", **qda_metrics})
         if not args.no_db:
-            n = _log_predictions(engine, test_reset, qda_pipe.predict_proba(X_test_reset), "tier7_qda_v1")
+            n = _log_predictions(engine, test_reset, qda_pipe.predict_proba(X_test), "tier7_qda_v1")
             logger.info("Logged %d predictions for tier7_qda_v1", n)
     else:
         logger.warning("QDA training failed — omitted from tournament results.")

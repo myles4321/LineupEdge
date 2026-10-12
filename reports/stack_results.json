@@ -1,0 +1,86 @@
+{
+  "split": {
+    "train": 2022,
+    "val": 2023,
+    "test": 2024
+  },
+  "n_features": 34,
+  "n_base_models": 8,
+  "base_models": [
+    "rf",
+    "svm",
+    "knn",
+    "mlp",
+    "ridge",
+    "lasso",
+    "enet",
+    "lda"
+  ],
+  "meta_learner": {
+    "best_C": 0.1,
+    "cv_log_loss": 0.9782
+  },
+  "stack": {
+    "model_version": "tier7_stack_v1",
+    "log_loss": 1.0079,
+    "brier_score": 0.2007,
+    "accuracy": 0.5211,
+    "roc_auc_macro": 0.647
+  },
+  "base_model_weights": {
+    "rf": {
+      "H": 0.1634,
+      "D": -0.042,
+      "A": 0.2197,
+      "mean_abs_coef": 0.108
+    },
+    "svm": {
+      "H": 0.1116,
+      "D": -0.104,
+      "A": 0.101,
+      "mean_abs_coef": 0.0931
+    },
+    "knn": {
+      "H": 0.2137,
+      "D": -0.0866,
+      "A": 0.1843,
+      "mean_abs_coef": 0.1266
+    },
+    "mlp": {
+      "H": 0.2022,
+      "D": -0.0751,
+      "A": 0.0515,
+      "mean_abs_coef": 0.1064
+    },
+    "ridge": {
+      "H": 0.2122,
+      "D": -0.0525,
+      "A": 0.1467,
+      "mean_abs_coef": 0.1058
+    },
+    "lasso": {
+      "H": 0.1778,
+      "D": -0.0258,
+      "A": 0.1292,
+      "mean_abs_coef": 0.0845
+    },
+    "enet": {
+      "H": 0.1806,
+      "D": -0.0306,
+      "A": 0.1259,
+      "mean_abs_coef": 0.0868
+    },
+    "lda": {
+      "H": 0.1767,
+      "D": -0.0463,
+      "A": 0.1918,
+      "mean_abs_coef": 0.1021
+    }
+  },
+  "comparison": {
+    "lasso_log_loss": 0.9964,
+    "bookmaker_log_loss": 0.9708,
+    "stack_delta_vs_lasso": 0.0115,
+    "stack_delta_vs_bookmaker": 0.0371
+  }
+}
