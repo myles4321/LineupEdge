@@ -1,0 +1,136 @@
+{
+  "split": {
+    "train": 2022,
+    "val": 2023,
+    "test": 2024
+  },
+  "n_features_full": 34,
+  "pca": {
+    "n_components_95pct": 13,
+    "xgb_full_ll": 1.0201,
+    "xgb_pca_ll": 1.2754,
+    "rf_full_ll": 1.025,
+    "rf_pca_ll": 1.0673,
+    "xgb_pca_delta": 0.2553,
+    "rf_pca_delta": 0.0423
+  },
+  "lda": {
+    "n_components": 2,
+    "logreg_full_ll": 0.9964,
+    "logreg_lda_ll": 1.6713,
+    "knn_full_ll": 1.0131,
+    "knn_lda_ll": 1.2252,
+    "logreg_lda_delta": 0.6749,
+    "knn_lda_delta": 0.2121
+  },
+  "lasso_selection": {
+    "n_surviving_features": 20,
+    "surviving_features": [
+      "home_elo",
+      "elo_diff",
+      "home_form5_win_rate",
+      "home_form5_loss_rate",
+      "away_form5_draw_rate",
+      "home_form10_draw_rate",
+      "home_form10_loss_rate",
+      "away_form10_win_rate",
+      "away_form10_draw_rate",
+      "home_home_win_rate",
+      "away_rest_days",
+      "rest_days_diff",
+      "home_position",
+      "home_goal_diff",
+      "away_position",
+      "away_goal_diff",
+      "home_ppg_last5",
+      "h2h_home_win_rate",
+      "h2h_draw_rate",
+      "h2h_away_win_rate"
+    ],
+    "feature_details": {
+      "elo_diff": {
+        "mean_abs_coef": 0.231017,
+        "xgb_gain_rank": 1
+      },
+      "away_goal_diff": {
+        "mean_abs_coef": 0.093238,
+        "xgb_gain_rank": 17
+      },
+      "home_position": {
+        "mean_abs_coef": 0.083188,
+        "xgb_gain_rank": 21
+      },
+      "away_form5_draw_rate": {
+        "mean_abs_coef": 0.079692,
+        "xgb_gain_rank": 25
+      },
+      "home_ppg_last5": {
+        "mean_abs_coef": 0.065511,
+        "xgb_gain_rank": 8
+      },
+      "away_form10_win_rate": {
+        "mean_abs_coef": 0.057716,
+        "xgb_gain_rank": 29
+      },
+      "home_elo": {
+        "mean_abs_coef": 0.056543,
+        "xgb_gain_rank": 2
+      },
+      "home_form10_draw_rate": {
+        "mean_abs_coef": 0.050854,
+        "xgb_gain_rank": 27
+      },
+      "rest_days_diff": {
+        "mean_abs_coef": 0.040362,
+        "xgb_gain_rank": 6
+      },
+      "h2h_away_win_rate": {
+        "mean_abs_coef": 0.037459,
+        "xgb_gain_rank": 16
+      },
+      "home_goal_diff": {
+        "mean_abs_coef": 0.033255,
+        "xgb_gain_rank": 26
+      },
+      "away_position": {
+        "mean_abs_coef": 0.02636,
+        "xgb_gain_rank": 10
+      },
+      "away_form10_draw_rate": {
+        "mean_abs_coef": 0.025692,
+        "xgb_gain_rank": 13
+      },
+      "h2h_draw_rate": {
+        "mean_abs_coef": 0.024178,
+        "xgb_gain_rank": 5
+      },
+      "home_home_win_rate": {
+        "mean_abs_coef": 0.022903,
+        "xgb_gain_rank": 23
+      },
+      "home_form5_win_rate": {
+        "mean_abs_coef": 0.019911,
+        "xgb_gain_rank": 33
+      },
+      "away_rest_days": {
+        "mean_abs_coef": 0.018724,
+        "xgb_gain_rank": 14
+      },
+      "home_form5_loss_rate": {
+        "mean_abs_coef": 0.011156,
+        "xgb_gain_rank": 4
+      },
+      "home_form10_loss_rate": {
+        "mean_abs_coef": 0.009188,
+        "xgb_gain_rank": 3
+      },
+      "h2h_home_win_rate": {
+        "mean_abs_coef": 0.005214,
+        "xgb_gain_rank": 28
+      }
+    },
+    "xgb_full_ll": 1.0201,
+    "xgb_lasso_ll": 1.1217,
+    "xgb_lasso_delta": 0.1016
+  }
+}
