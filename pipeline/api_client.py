@@ -67,7 +67,19 @@ class APIFootballClient:
         response = self._session.get(url, params=params, timeout=30)
 
         if response.status_code == 429:
-            logger.error("429 Too Many Requests — API-Football rate limit hit.")
+            # Distinguish per-minute throttle from daily quota exhaustion.
+            # API-Football sets x-ratelimit-requests-remaining=0 only when the
+            # daily budget is gone; a non-zero value means per-minute throttle.
+            daily_remaining = int(response.headers.get("x-ratelimit-requests-remaining", "0"))
+            if daily_remaining > 0:
+                logger.warning(
+                    "Per-minute rate limit hit (%d daily requests still available). "
+                    "Sleeping 65 s then retrying.",
+                    daily_remaining,
+                )
+                time.sleep(65)
+                return self.get(endpoint, params)
+            logger.error("429 Too Many Requests — daily quota exhausted.")
             raise DailyLimitReached("API returned 429; daily limit exceeded upstream.")
 
         response.raise_for_status()
@@ -137,5 +149,6 @@ class APIFootballClient:
             self._rate_state["count"],
             API_DAILY_REQUEST_LIMIT,
         )
-        # Small courtesy delay between requests (avoids burst triggering)
-        time.sleep(0.5)
+        # 7 s delay → ~8 req/min, safely under the API-Football free-plan
+        # per-minute limit of 10 req/min.
+        time.sleep(7)
