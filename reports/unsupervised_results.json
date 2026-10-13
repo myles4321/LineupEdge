@@ -1,0 +1,149 @@
+{
+  "kmeans": {
+    "n_teams": 24,
+    "features_used": [
+      "mean_elo",
+      "home_win_rate",
+      "away_win_rate",
+      "mean_home_ppg",
+      "mean_away_ppg"
+    ],
+    "silhouette_scores": {
+      "3": 0.5427,
+      "4": 0.5809,
+      "5": 0.5085,
+      "6": 0.4291
+    },
+    "best_k": 4,
+    "clusters": {
+      "2": {
+        "size": 3,
+        "mean_elo": 1635.1,
+        "home_win_rate": 0.7368,
+        "away_win_rate": 0.5439,
+        "mean_home_ppg": 2.1518,
+        "mean_away_ppg": 2.1452,
+        "teams": [
+          40,
+          42,
+          50
+        ]
+      },
+      "1": {
+        "size": 6,
+        "mean_elo": 1542.3,
+        "home_win_rate": 0.5497,
+        "away_win_rate": 0.3567,
+        "mean_home_ppg": 1.5448,
+        "mean_away_ppg": 1.6234,
+        "teams": [
+          33,
+          34,
+          47,
+          49,
+          51,
+          66
+        ]
+      },
+      "3": {
+        "size": 8,
+        "mean_elo": 1477.4,
+        "home_win_rate": 0.3816,
+        "away_win_rate": 0.2785,
+        "mean_home_ppg": 1.1982,
+        "mean_away_ppg": 1.2553,
+        "teams": [
+          35,
+          36,
+          39,
+          45,
+          48,
+          52,
+          55,
+          65
+        ]
+      },
+      "0": {
+        "size": 7,
+        "mean_elo": 1430.2,
+        "home_win_rate": 0.1504,
+        "away_win_rate": 0.1241,
+        "mean_home_ppg": 0.6427,
+        "mean_away_ppg": 0.6523,
+        "teams": [
+          41,
+          44,
+          46,
+          57,
+          62,
+          63,
+          1359
+        ]
+      }
+    }
+  },
+  "hierarchical": {
+    "n_matches": 1126,
+    "features_used": [
+      "elo_diff",
+      "points_diff",
+      "home_form5_win_rate",
+      "away_form5_win_rate"
+    ],
+    "n_clusters": 4,
+    "clusters": {
+      "1": {
+        "size": 543,
+        "mean_elo_diff": -72.2,
+        "mean_points_diff": -9.8,
+        "home_win_rate": 0.2654,
+        "away_win_rate": 0.5335,
+        "outcome_pct": {
+          "H": 31.3,
+          "D": 23.8,
+          "A": 44.9
+        },
+        "label": "Away Favoured"
+      },
+      "2": {
+        "size": 234,
+        "mean_elo_diff": 18.6,
+        "mean_points_diff": 2.8,
+        "home_win_rate": 0.222,
+        "away_win_rate": 0.1226,
+        "outcome_pct": {
+          "H": 50.0,
+          "D": 24.8,
+          "A": 25.2
+        },
+        "label": "Balanced Contest"
+      },
+      "3": {
+        "size": 94,
+        "mean_elo_diff": 193.6,
+        "mean_points_diff": 29.8,
+        "home_win_rate": 0.5638,
+        "away_win_rate": 0.1362,
+        "outcome_pct": {
+          "H": 69.1,
+          "D": 23.4,
+          "A": 7.4
+        },
+        "label": "Strong Home"
+      },
+      "4": {
+        "size": 255,
+        "mean_elo_diff": 61.9,
+        "mean_points_diff": 6.9,
+        "home_win_rate": 0.6874,
+        "away_win_rate": 0.4346,
+        "outcome_pct": {
+          "H": 61.6,
+          "D": 20.0,
+          "A": 18.4
+        },
+        "label": "Home Favoured"
+      }
+    }
+  }
+}
