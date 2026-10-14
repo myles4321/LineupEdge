@@ -1,0 +1,184 @@
+{
+  "model": "XGBoost (train+val fit, test SHAP)",
+  "n_test": 380,
+  "n_features": 34,
+  "shap_top15": [
+    {
+      "rank": 1,
+      "feature": "elo_diff",
+      "mean_abs_shap": 0.135771,
+      "gain_rank": 1,
+      "delta_rank": 0
+    },
+    {
+      "rank": 2,
+      "feature": "home_elo",
+      "mean_abs_shap": 0.132477,
+      "gain_rank": 2,
+      "delta_rank": 0
+    },
+    {
+      "rank": 3,
+      "feature": "points_diff",
+      "mean_abs_shap": 0.089152,
+      "gain_rank": null,
+      "delta_rank": null
+    },
+    {
+      "rank": 4,
+      "feature": "away_form5_draw_rate",
+      "mean_abs_shap": 0.074768,
+      "gain_rank": 25,
+      "delta_rank": 21
+    },
+    {
+      "rank": 5,
+      "feature": "home_goal_diff",
+      "mean_abs_shap": 0.063312,
+      "gain_rank": 26,
+      "delta_rank": 21
+    },
+    {
+      "rank": 6,
+      "feature": "away_form10_draw_rate",
+      "mean_abs_shap": 0.061835,
+      "gain_rank": 13,
+      "delta_rank": 7
+    },
+    {
+      "rank": 7,
+      "feature": "ppg_diff",
+      "mean_abs_shap": 0.057979,
+      "gain_rank": null,
+      "delta_rank": null
+    },
+    {
+      "rank": 8,
+      "feature": "away_elo",
+      "mean_abs_shap": 0.05787,
+      "gain_rank": null,
+      "delta_rank": null
+    },
+    {
+      "rank": 9,
+      "feature": "away_position",
+      "mean_abs_shap": 0.056266,
+      "gain_rank": 10,
+      "delta_rank": 1
+    },
+    {
+      "rank": 10,
+      "feature": "home_home_win_rate",
+      "mean_abs_shap": 0.053741,
+      "gain_rank": 23,
+      "delta_rank": 13
+    },
+    {
+      "rank": 11,
+      "feature": "away_goal_diff",
+      "mean_abs_shap": 0.052626,
+      "gain_rank": 17,
+      "delta_rank": 6
+    },
+    {
+      "rank": 12,
+      "feature": "home_rest_days",
+      "mean_abs_shap": 0.049136,
+      "gain_rank": null,
+      "delta_rank": null
+    },
+    {
+      "rank": 13,
+      "feature": "home_form10_loss_rate",
+      "mean_abs_shap": 0.046797,
+      "gain_rank": 3,
+      "delta_rank": -10
+    },
+    {
+      "rank": 14,
+      "feature": "away_rest_days",
+      "mean_abs_shap": 0.04272,
+      "gain_rank": 14,
+      "delta_rank": 0
+    },
+    {
+      "rank": 15,
+      "feature": "home_position",
+      "mean_abs_shap": 0.040811,
+      "gain_rank": 21,
+      "delta_rank": 6
+    }
+  ],
+  "draw_shap_top10": [
+    {
+      "feature": "elo_diff",
+      "mean_shap_draw": -0.046965,
+      "direction": "away_from_draw"
+    },
+    {
+      "feature": "home_elo",
+      "mean_shap_draw": 0.028281,
+      "direction": "toward_draw"
+    },
+    {
+      "feature": "away_form10_draw_rate",
+      "mean_shap_draw": -0.021176,
+      "direction": "away_from_draw"
+    },
+    {
+      "feature": "home_position",
+      "mean_shap_draw": -0.020256,
+      "direction": "away_from_draw"
+    },
+    {
+      "feature": "home_form10_loss_rate",
+      "mean_shap_draw": -0.016168,
+      "direction": "away_from_draw"
+    },
+    {
+      "feature": "points_diff",
+      "mean_shap_draw": -0.013922,
+      "direction": "away_from_draw"
+    },
+    {
+      "feature": "h2h_home_win_rate",
+      "mean_shap_draw": 0.011248,
+      "direction": "toward_draw"
+    },
+    {
+      "feature": "h2h_draw_rate",
+      "mean_shap_draw": 0.010251,
+      "direction": "toward_draw"
+    },
+    {
+      "feature": "away_goal_diff",
+      "mean_shap_draw": -0.010055,
+      "direction": "away_from_draw"
+    },
+    {
+      "feature": "away_points",
+      "mean_shap_draw": -0.009264,
+      "direction": "away_from_draw"
+    }
+  ],
+  "illustrative_matches": {
+    "high_conf_correct": {
+      "match_idx": 297,
+      "predicted": "H",
+      "actual": "H",
+      "max_prob": 0.9275
+    },
+    "high_conf_wrong": {
+      "match_idx": 313,
+      "predicted": "H",
+      "actual": "D",
+      "max_prob": 0.8853
+    },
+    "near_draw": {
+      "match_idx": 259,
+      "predicted": "H",
+      "actual": "H",
+      "max_prob": 0.3453
+    }
+  }
+}
