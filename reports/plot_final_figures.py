@@ -30,6 +30,7 @@ import json
 import os
 import pathlib
 import re
+import shutil
 import sys
 import warnings
 
@@ -563,6 +564,138 @@ def _plot_final_feature_importance() -> pathlib.Path | None:
     return out
 
 
+# ── Figure 4: Tournament log-loss bar chart ───────────────────────────────────
+
+_MODEL_DISPLAY_PLOT = {
+    "tier7_rf_v1":    "Random Forest",
+    "tier7_svm_v1":   "SVM RBF",
+    "tier7_knn_v1":   "KNN",
+    "tier7_gnb_v1":   "Gaussian NB",
+    "tier7_mlp_v1":   "MLP",
+    "tier7_ridge_v1": "Ridge LogReg",
+    "tier7_lasso_v1": "LASSO LogReg",
+    "tier7_enet_v1":  "Elastic Net",
+    "tier7_lda_v1":   "LDA",
+    "tier7_qda_v1":   "QDA",
+}
+
+_FAILED_PLOT = {"Gaussian NB", "QDA"}
+
+
+def _plot_final_tournament() -> pathlib.Path | None:
+    """Horizontal bar chart of all 10 tournament classifiers by log loss."""
+    path = _REPORTS_DIR / "tournament_results.json"
+    if not path.exists():
+        print(
+            f"[WARNING] {path} not found — tournament figure skipped.",
+            file=sys.stderr,
+        )
+        return None
+
+    data    = json.loads(path.read_text())
+    results = data["results"]
+    bm      = data["bookmaker"]
+
+    # Exclude catastrophic failures from chart, sort best → worst (lowest LL at top)
+    rows = [
+        (
+            _MODEL_DISPLAY_PLOT.get(r["model_version"], r["model_version"]),
+            r["log_loss"],
+        )
+        for r in results
+        if _MODEL_DISPLAY_PLOT.get(r["model_version"], r["model_version"]) not in _FAILED_PLOT
+    ]
+    rows.sort(key=lambda x: x[1], reverse=True)   # worst at top → best at bottom
+
+    names  = [r[0] for r in rows]
+    losses = [r[1] for r in rows]
+    bm_ll  = bm["log_loss"]
+
+    colours = ["#9333ea" if "Stack" in n else "#2563eb" for n in names]
+
+    with plt.rc_context(_PUB_RC):
+        fig, ax = plt.subplots(figsize=(12, 7))
+
+        y_pos = np.arange(len(names))
+        bars  = ax.barh(y_pos, losses, color=colours, alpha=0.85,
+                        edgecolor="white", linewidth=0.8, height=0.65)
+
+        ax.axvline(
+            bm_ll,
+            color="#dc2626",
+            linestyle="--",
+            linewidth=1.8,
+            label=f"Bookmaker B365 ({bm_ll:.4f})",
+        )
+
+        ax.set_yticks(y_pos)
+        ax.set_yticklabels(names, fontsize=10)
+        ax.set_xlabel("Log Loss (test set, EPL 2024)", fontsize=12)
+        ax.set_title(
+            "Model Tournament — EPL 2024 Test Set\n"
+            "All 10 classifiers vs Bookmaker B365\n"
+            "(QDA and Gaussian NB excluded — LL > 2.7)",
+            fontsize=13,
+        )
+        ax.legend(fontsize=10)
+        ax.grid(axis="x", alpha=0.3)
+        ax.set_axisbelow(True)
+
+        for bar, val in zip(bars, losses):
+            ax.text(
+                val + 0.001,
+                bar.get_y() + bar.get_height() / 2,
+                f"{val:.4f}",
+                va="center",
+                fontsize=8.5,
+            )
+
+        plt.tight_layout()
+
+        out = _REPORTS_DIR / "final_tournament.png"
+        plt.savefig(out, dpi=300, bbox_inches="tight")
+        plt.close()
+
+    print(f"Saved: {out}")
+    return out
+
+
+# ── Figure 5: SHAP summary (copy beeswarm) ────────────────────────────────────
+
+
+def _copy_shap_summary() -> pathlib.Path | None:
+    """Copy reports/shap_beeswarm.png → reports/final_shap_summary.png."""
+    src = _REPORTS_DIR / "shap_beeswarm.png"
+    dst = _REPORTS_DIR / "final_shap_summary.png"
+    if not src.exists():
+        print(
+            f"[WARNING] {src} not found — final_shap_summary.png skipped.",
+            file=sys.stderr,
+        )
+        return None
+    shutil.copy2(src, dst)
+    print(f"Copied shap_beeswarm.png → final_shap_summary.png")
+    return dst
+
+
+# ── Figure 6: Clusters (copy kmeans scatter) ──────────────────────────────────
+
+
+def _copy_clusters() -> pathlib.Path | None:
+    """Copy reports/kmeans_clusters.png → reports/final_clusters.png."""
+    src = _REPORTS_DIR / "kmeans_clusters.png"
+    dst = _REPORTS_DIR / "final_clusters.png"
+    if not src.exists():
+        print(
+            f"[WARNING] {src} not found — final_clusters.png skipped.",
+            file=sys.stderr,
+        )
+        return None
+    shutil.copy2(src, dst)
+    print(f"Copied kmeans_clusters.png → final_clusters.png")
+    return dst
+
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 
@@ -590,6 +723,15 @@ def main() -> None:
 
     print("\n--- Metrics comparison figure ---")
     _plot_final_metrics_comparison()
+
+    print("\n--- Tournament figure ---")
+    _plot_final_tournament()
+
+    print("\n--- SHAP summary figure ---")
+    _copy_shap_summary()
+
+    print("\n--- Clusters figure ---")
+    _copy_clusters()
 
     # ── Database-dependent figure ─────────────────────────────────────────────
     if args.no_db:
