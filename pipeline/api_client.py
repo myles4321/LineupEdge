@@ -64,7 +64,23 @@ class APIFootballClient:
         self._check_and_increment()
 
         url = f"{API_FOOTBALL_BASE_URL}{endpoint}"
-        response = self._session.get(url, params=params, timeout=30)
+        _transient = (
+            requests.exceptions.ReadTimeout,
+            requests.exceptions.ConnectionError,
+        )
+        for attempt in range(3):
+            try:
+                response = self._session.get(url, params=params, timeout=60)
+                break
+            except _transient as exc:
+                if attempt == 2:
+                    raise
+                wait = 20 * (attempt + 1)
+                logger.warning(
+                    "%s for %s (attempt %d/3) — retrying after %d s.",
+                    type(exc).__name__, endpoint, attempt + 1, wait,
+                )
+                time.sleep(wait)
 
         if response.status_code == 429:
             # Distinguish per-minute throttle from daily quota exhaustion.
