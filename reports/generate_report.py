@@ -597,6 +597,373 @@ python reports/plot_final_figures.py
 """
 
 
+# ── Phase 7 section helpers ───────────────────────────────────────────────────
+
+
+def _load_json_optional(reports_dir: pathlib.Path, filename: str) -> dict | None:
+    """Load a JSON file; return None if absent (graceful degradation)."""
+    path = reports_dir / filename
+    if not path.exists():
+        return None
+    return json.loads(path.read_text())
+
+
+_MODEL_DISPLAY = {
+    "tier7_rf_v1":    "Random Forest",
+    "tier7_svm_v1":   "SVM RBF",
+    "tier7_knn_v1":   "KNN",
+    "tier7_gnb_v1":   "Gaussian NB",
+    "tier7_mlp_v1":   "MLP",
+    "tier7_ridge_v1": "Ridge LogReg",
+    "tier7_lasso_v1": "LASSO LogReg",
+    "tier7_enet_v1":  "Elastic Net",
+    "tier7_lda_v1":   "LDA",
+    "tier7_qda_v1":   "QDA",
+}
+
+_FAILED_MODELS = {"Gaussian NB", "QDA"}
+
+
+# ── Phase 7a: Model Tournament ────────────────────────────────────────────────
+
+
+def _section_tournament(reports_dir: pathlib.Path) -> str:
+    data = _load_json_optional(reports_dir, "tournament_results.json")
+    if data is None:
+        return """\
+## 13. Model Tournament (Phase 7a)
+
+`tournament_results.json` not found. Run `python models/tournament.py`.
+
+---
+"""
+
+    results  = sorted(data["results"], key=lambda r: r["log_loss"])
+    bm       = data["bookmaker"]
+    best     = next(
+        r for r in results
+        if _MODEL_DISPLAY.get(r["model_version"], r["model_version"]) not in _FAILED_MODELS
+    )
+    best_name = _MODEL_DISPLAY.get(best["model_version"], best["model_version"])
+    gap       = best["log_loss"] - bm["log_loss"]
+
+    rows = []
+    for i, r in enumerate(results, 1):
+        name  = _MODEL_DISPLAY.get(r["model_version"], r["model_version"])
+        note  = " ⚠ catastrophic failure" if name in _FAILED_MODELS else ""
+        rows.append(
+            f"| {i} | {name} | {r['log_loss']:.4f} | {r['brier_score']:.4f} | "
+            f"{r['accuracy']*100:.1f}% | {r['roc_auc_macro']:.4f} | "
+            f"{r['cv_mean_log_loss']:.4f} ± {r['cv_std_log_loss']:.4f}{note} |"
+        )
+    # Bookmaker row
+    rows.append(
+        f"| ★ | Bookmaker B365 | {bm['log_loss']:.4f} | {bm['brier_score']:.4f} | "
+        f"{bm['accuracy']*100:.1f}% | {bm['roc_auc_macro']:.4f} | — |"
+    )
+    table = "\n".join(rows)
+
+    lasso_zeros = data.get("lasso_zero_features", [])
+    lasso_note = (
+        f"LASSO zeroed {len(lasso_zeros)}/34 features: {', '.join(lasso_zeros[:5])}"
+        + (" …" if len(lasso_zeros) > 5 else ".")
+        if lasso_zeros else ""
+    )
+
+    return f"""\
+## 13. Model Tournament (Phase 7a)
+
+10 classifiers evaluated on the EPL 2024 test season (380 matches).
+All models trained on 2022+2023, tuned on 2023 validation season.
+
+| Rank | Model | Log Loss | Brier | Acc% | AUC | CV LL ± σ |
+|------|-------|----------|-------|------|-----|-----------|
+{table}
+
+**Key findings:**
+
+- **Winner: {best_name}** — log loss {best["log_loss"]:.4f}, gap to bookmaker: {gap:+.4f} nats.
+- **QDA and Gaussian NB fail catastrophically** (LL > 2.7) due to collinearity among Tier 1
+  features. QDA's covariance inversion is numerically unstable; GNB's feature-independence
+  assumption is severely violated.
+- The ~0.026-nat gap to B365 is expected for team-level-only models — lineup data (Tier 2)
+  is the anticipated source of the remaining signal.
+{('- ' + lasso_note) if lasso_note else ''}
+
+---
+"""
+
+
+# ── Phase 7b: Stacking / Super Learner ────────────────────────────────────────
+
+
+def _section_stacking(reports_dir: pathlib.Path) -> str:
+    data = _load_json_optional(reports_dir, "stack_results.json")
+    if data is None:
+        return """\
+## 14. Stacking / Super Learner (Phase 7b)
+
+`stack_results.json` not found. Run `python models/stack.py`.
+
+---
+"""
+
+    stack = data["stack"]
+    comp  = data.get("comparison", {})
+    lasso_ll    = comp.get("lasso_log_loss", float("nan"))
+    bm_ll       = comp.get("bookmaker_log_loss", float("nan"))
+    delta_lasso = comp.get("stack_delta_vs_lasso", float("nan"))
+
+    _SHORT_TO_DISPLAY = {
+        "rf": "Random Forest", "svm": "SVM RBF", "knn": "KNN",
+        "mlp": "MLP", "ridge": "Ridge LogReg", "lasso": "LASSO LogReg",
+        "enet": "Elastic Net", "lda": "LDA",
+    }
+    weights = data.get("base_model_weights", {})
+    top3_weights = sorted(
+        weights.items(), key=lambda x: -x[1].get("mean_abs_coef", 0)
+    )[:3]
+    weight_rows = "\n".join(
+        f"| {_SHORT_TO_DISPLAY.get(k, k)} | {v.get('mean_abs_coef', float('nan')):.4f} |"
+        for k, v in top3_weights
+    )
+
+    return f"""\
+## 14. Stacking / Super Learner (Phase 7b)
+
+A Super Learner (stacked ensemble) was trained using 8 base classifiers
+(excluding QDA and Gaussian NB) and a Logistic Regression meta-learner.
+
+| Model | Log Loss | Note |
+|-------|----------|------|
+| LASSO LogReg (best individual) | {lasso_ll:.4f} | Best Phase 7a model |
+| Super Learner (stack) | {stack['log_loss']:.4f} | Meta-learner ensemble |
+| Bookmaker B365 | {bm_ll:.4f} | Market benchmark |
+
+**Stack vs LASSO:** {delta_lasso:+.4f} nats (positive = stack worse than LASSO).
+
+**Top 3 meta-learner feature weights:**
+
+| Base Model | Weight |
+|------------|--------|
+{weight_rows}
+
+**Academic note:** The Super Learner underperforms LASSO (+{delta_lasso:.4f} nats) because
+all 8 base models share identical Tier 1 features, producing highly correlated errors.
+Stacking requires diverse base learners to add value — a theoretical prediction of the
+stacking literature (Wolpert, 1992; Van der Laan et al., 2007) confirmed empirically here.
+The stack does not significantly diversify away from the LASSO's already-sparse
+feature representation.
+
+---
+"""
+
+
+# ── Phase 7c: Dimensionality Reduction ────────────────────────────────────────
+
+
+def _section_dim_reduction(reports_dir: pathlib.Path) -> str:
+    data = _load_json_optional(reports_dir, "dim_reduction_results.json")
+    if data is None:
+        return """\
+## 15. Dimensionality Reduction (Phase 7c)
+
+`dim_reduction_results.json` not found. Run `python models/dim_reduction.py`.
+
+---
+"""
+
+    pca   = data.get("pca", {})
+    lda   = data.get("lda", {})
+    lasso = data.get("lasso_selection", {})
+
+    pca_n        = pca.get("n_components_95pct", "—")
+    pca_full_ll  = pca.get("xgb_full_ll", float("nan"))
+    pca_pca_ll   = pca.get("xgb_pca_ll", float("nan"))
+    pca_delta    = pca_pca_ll - pca_full_ll
+
+    lda_ll       = lda.get("logreg_lda_ll", float("nan"))
+    lda_n        = lda.get("n_components", "—")
+
+    lasso_k      = lasso.get("n_surviving_features", "—")
+    fd           = lasso.get("feature_details", {})
+    lasso_rank1  = (
+        max(fd, key=lambda f: fd[f].get("mean_abs_coef", 0))
+        if fd else "—"
+    )
+
+    return f"""\
+## 15. Dimensionality Reduction (Phase 7c)
+
+| Method | Summary | XGBoost Log Loss | Δ vs Full |
+|--------|---------|-----------------|-----------|
+| Baseline (full 34 features) | All Tier 1 features | {pca_full_ll:.4f} | — |
+| PCA ({pca_n} components) | {pca_n} components retain 95% variance | {pca_pca_ll:.4f} | {pca_delta:+.4f} |
+| LDA ({lda_n}D) | Max discriminant directions | {lda_ll:.4f} | {lda_ll - pca_full_ll:+.4f} |
+| LASSO selection | {lasso_k} features survive at C=0.1 | — | — |
+
+**Key findings:**
+
+- **PCA:** 34 features compress to {pca_n} components for 95% variance retention.
+  XGBoost on PCA space shows Δ = {pca_delta:+.4f} nats vs. full features — confirming
+  that feature redundancy exists but raw features are preferable for tree models.
+- **LDA** projects to {lda_n} discriminant dimensions. Log loss = {lda_ll:.4f}.
+  LDA's linear assumption is more restrictive than XGBoost's native feature handling.
+- **LASSO** selection: {lasso_k}/34 features survive with non-zero coefficients.
+  Top survivor: `{lasso_rank1}` — convergent validity with XGBoost gain rank 1 (elo_diff).
+  The {34 - (lasso_k if isinstance(lasso_k, int) else 34)} zeroed features are
+  redundant form rates, standings, and rest-day variants.
+
+---
+"""
+
+
+# ── Phase 7d: Unsupervised Analysis ───────────────────────────────────────────
+
+
+def _section_unsupervised(reports_dir: pathlib.Path) -> str:
+    data = _load_json_optional(reports_dir, "unsupervised_results.json")
+    if data is None:
+        return """\
+## 16. Unsupervised Analysis (Phase 7d)
+
+`unsupervised_results.json` not found. Run `python models/unsupervised.py`.
+
+---
+"""
+
+    km   = data.get("kmeans", {})
+    hier = data.get("hierarchical", {})
+
+    best_k   = km.get("best_k", "—")
+    sil      = km.get("silhouette_scores", {})
+    best_sil = sil.get(str(best_k), float("nan"))
+
+    km_clusters = km.get("clusters", {})
+    km_rows = []
+    for c_id, info in sorted(km_clusters.items(), key=lambda x: -x[1]["mean_elo"]):
+        km_rows.append(
+            f"| {c_id} | {info['size']} | {info['mean_elo']:.0f} | "
+            f"{info['home_win_rate']*100:.1f}% | {info['away_win_rate']*100:.1f}% |"
+        )
+    km_table = "\n".join(km_rows)
+
+    hier_clusters = hier.get("clusters", {})
+    hier_rows = []
+    for c_id, info in sorted(
+        hier_clusters.items(), key=lambda x: -x[1]["mean_elo_diff"]
+    ):
+        op = info.get("outcome_pct", {})
+        hier_rows.append(
+            f"| {info.get('label', c_id)} | {info['size']} | "
+            f"{info['mean_elo_diff']:+.1f} | "
+            f"{op.get('H', '—')} | {op.get('D', '—')} | {op.get('A', '—')} |"
+        )
+    hier_table = "\n".join(hier_rows)
+
+    return f"""\
+## 16. Unsupervised Analysis (Phase 7d)
+
+### K-Means Team Clustering
+
+Best k = **{best_k}** (silhouette = {best_sil:.3f}).
+
+| Cluster | Size | Mean ELO | Home W% | Away W% |
+|---------|------|----------|---------|---------|
+{km_table}
+
+ELO bands: ~1635 elite (top-6), ~1542 upper-mid, ~1477 mid-table, ~1430 relegation.
+
+### Ward Hierarchical Match-Context Clustering (n = {hier.get('n_matches', '—')} matches)
+
+| Context Label | Size | ELO Δ | H% | D% | A% |
+|---------------|------|-------|----|----|-----|
+{hier_table}
+
+**Key findings:**
+
+- K = 4 is clearly optimal (silhouette {best_sil:.3f} vs k=3: see JSON) — matches the
+  well-known four-tier EPL structure (elite / upper-mid / mid-table / relegation).
+- **Away Favoured** is the largest match-context cluster (n ≈ 543, 48%) — most EPL
+  matches involve a stronger visiting side, reflecting that top-6 clubs frequently
+  travel to mid/lower clubs.
+- **Strong Home** (ELO diff > +190, H% ≈ 69%) is rare (n ≈ 94) but the most
+  predictable context in the dataset.
+
+---
+"""
+
+
+# ── Phase 7e: SHAP Explainability ─────────────────────────────────────────────
+
+
+def _section_shap(reports_dir: pathlib.Path) -> str:
+    data = _load_json_optional(reports_dir, "shap_results.json")
+    if data is None:
+        return """\
+## 17. SHAP Explainability (Phase 7e)
+
+`shap_results.json` not found. Run `python models/explain.py`.
+
+---
+"""
+
+    top15   = data.get("shap_top15", [])
+    draw10  = data.get("draw_shap_top10", [])
+
+    top5_rows = []
+    for f in top15[:5]:
+        gain_rank = f.get("gain_rank", "—")
+        delta     = f.get("delta_rank", "—")
+        top5_rows.append(
+            f"| {f['rank']} | `{f['feature']}` | {f['mean_abs_shap']:.4f} | "
+            f"{gain_rank} | {delta} |"
+        )
+    top5_table = "\n".join(top5_rows)
+
+    draw_pushers = [d for d in draw10 if d["direction"] == "toward_draw"][:3]
+    draw_suppress = [d for d in draw10 if d["direction"] == "away_from_draw"][:3]
+
+    push_str = ", ".join(f"`{d['feature']}`" for d in draw_pushers) or "—"
+    supp_str = ", ".join(f"`{d['feature']}`" for d in draw_suppress) or "—"
+
+    top1 = top15[0] if top15 else {}
+    convergent = top1.get("delta_rank", None) == 0
+
+    return f"""\
+## 17. SHAP Explainability (Phase 7e)
+
+TreeExplainer SHAP values computed for XGBoost on the EPL 2024 test set
+({data.get('n_test', 380)} matches, {data.get('n_features', 34)} features).
+
+### Top 5 Features by Mean |SHAP| (all classes)
+
+| SHAP Rank | Feature | Mean |SHAP| | Gain Rank | Δ Rank |
+|-----------|---------|------------|-----------|--------|
+{top5_table}
+
+**Convergent validity:** `{top1.get('feature', '—')}` is rank 1 by both SHAP and XGBoost
+gain — {'✓ confirmed' if convergent else '⚠ diverges'} across two independent importance
+metrics. SHAP captures marginal contribution; gain captures split-quality frequency.
+Their agreement on `{top1.get('feature', '—')}` validates it as the primary predictive driver.
+
+### Draw SHAP Analysis
+
+- **Pushers toward draw:** {push_str}
+- **Suppressors of draw:** {supp_str}
+
+`elo_diff` suppresses draws (large ELO gaps → decisive predicted outcomes).
+H2H features (`h2h_draw_rate`, `h2h_home_win_rate`) are the primary draw promoters —
+historical match context information unavailable from team-level aggregates alone.
+
+**Notable rank divergence:** Several draw-rate form features (e.g. `away_form5_draw_rate`)
+jump from low gain rank to high SHAP rank, because gain underweights features used
+infrequently but with high marginal impact when applied.
+
+---
+"""
+
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 
@@ -647,6 +1014,11 @@ def main() -> None:
         _section_draw_limitations(),
         _section_future_work(),
         _section_reproducibility(),
+        _section_tournament(args.reports_dir),
+        _section_stacking(args.reports_dir),
+        _section_dim_reduction(args.reports_dir),
+        _section_unsupervised(args.reports_dir),
+        _section_shap(args.reports_dir),
     ]
 
     report_text = "\n".join(sections)

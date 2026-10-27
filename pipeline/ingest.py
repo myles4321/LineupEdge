@@ -182,7 +182,18 @@ def ingest_lineups(client: APIFootballClient, engine) -> None:
 
         lineups = data.get("response", [])
         if not lineups:
-            logger.debug("No lineup data for match %d — skipping.", match_id)
+            # Insert a sentinel so this match is never retried (API has no data).
+            with engine.connect() as conn:
+                conn.execute(
+                    text("""
+                        INSERT INTO lineups (match_id, team_id, formation)
+                        SELECT :match_id, home_team_id, NULL FROM matches WHERE match_id = :match_id
+                        ON CONFLICT (match_id, team_id) DO NOTHING
+                    """),
+                    {"match_id": match_id},
+                )
+                conn.commit()
+            logger.info("No lineup data from API for match %d — sentinel inserted.", match_id)
             continue
 
         with engine.connect() as conn:
